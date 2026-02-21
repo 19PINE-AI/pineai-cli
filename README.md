@@ -5,7 +5,7 @@ Unified command-line interface for [Pine AI](https://www.19pine.ai) — voice ca
 ## Install
 
 ```bash
-pip install pine-cli
+pip install pineai-cli
 ```
 
 Or install from source:
@@ -101,4 +101,7 @@ Credentials are stored at `~/.pine/config.json` after `pine auth login`. Both vo
 - [pine-assistant](https://pypi.org/project/pine-assistant/) — Pine AI Assistant SDK
 - [click](https://click.palletsprojects.com/) — CLI framework
 - [rich](https://rich.readthedocs.io/) — Terminal formatting
-# pine-cli
+
+## License
+
+MIT — see [LICENSE](LICENSE).

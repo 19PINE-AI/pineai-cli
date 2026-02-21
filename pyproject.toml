@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pineai-cli"
+version = "0.1.0"
+description = "Unified CLI for Pine AI — voice calls & assistant tasks from your terminal"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Pine AI" }]
+keywords = ["pine", "pine-ai", "cli", "voice", "assistant", "customer-service", "phone"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Environment :: Console",
+    "Topic :: Communications :: Telephony",
+    "Topic :: Office/Business",
+]
+dependencies = [
+    "pine-voice>=0.1.5",
+    "pine-assistant>=0.2.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/19PINE-AI/pineai-cli"
+Repository = "https://github.com/19PINE-AI/pineai-cli"
+Issues = "https://github.com/19PINE-AI/pineai-cli/issues"
+Documentation = "https://pineclaw.com"
+
+[project.scripts]
+pine = "pine_cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pine_cli"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pine_cli"]
