@@ -64,7 +64,9 @@ def send_cmd(message: str, session_id: Optional[str], json_output: bool):
             if not sid:
                 s = await client.sessions.create()
                 sid = s["id"]
-                if not json_output:
+                if json_output:
+                    click.echo(json.dumps({"type": "session_created", "data": {"session_id": sid}}))
+                else:
                     console.print(f"[dim]Session: {sid}[/dim]")
 
             await client.join_session(sid)
