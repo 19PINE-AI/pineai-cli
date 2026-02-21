@@ -19,17 +19,21 @@ def sessions():
 @sessions.command("list")
 @click.option("--state", default=None, help="Filter by state (e.g. init, active, task_finished)")
 @click.option("--limit", default=10, type=int, help="Max results (default: 10)")
+@click.option("--offset", default=0, type=int, help="Skip first N results (for pagination)")
 @click.option("--json-output", "--json", is_flag=True, help="Output as JSON")
 @handle_api_errors
-def sessions_list(state, limit, json_output):
+def sessions_list(state, limit, offset, json_output):
     """List sessions."""
     async def _list():
         client = get_assistant_client()
-        result = await client.sessions.list(state=state, limit=limit)
+        result = await client.sessions.list(state=state, limit=limit, offset=offset)
         if json_output:
             click.echo(json.dumps(result, indent=2))
             return
-        table = Table(title=f"Sessions ({result['total']} total)")
+        total = result['total']
+        end = min(offset + limit, total)
+        title = f"Sessions {offset + 1}–{end} of {total}" if offset else f"Sessions ({total} total)"
+        table = Table(title=title)
         table.add_column("ID", style="bold", no_wrap=True)
         table.add_column("State")
         table.add_column("Title", max_width=50)
@@ -42,6 +46,9 @@ def sessions_list(state, limit, json_output):
             table.add_row(s["id"], f"[{state_color}]{s.get('state', '')}[/{state_color}]",
                           s.get("title", ""), s.get("updated_at", ""))
         console.print(table)
+        if end < total:
+            next_offset = offset + limit
+            console.print(f"[dim]Showing {offset + 1}–{end} of {total}. Next page: pine sessions list --offset {next_offset}[/dim]")
 
     run_async(_list())
 

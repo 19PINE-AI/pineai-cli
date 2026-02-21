@@ -4,8 +4,9 @@ Pine CLI — unified command-line interface for Pine AI.
 Commands:
   pine auth login|status|logout   Authentication
   pine voice call|status          Voice calls
-  pine chat [session-id]          Interactive assistant chat
-  pine send <message>             One-shot assistant message
+  pine chat [session-id]          Interactive assistant chat (pick or create session)
+  pine send -s <id> <message>     Send a message to an existing session
+  pine send --new <message>       Create a session and send (non-interactive)
   pine sessions list|get|create|delete  Session management
   pine task start|stop            Task lifecycle
 """

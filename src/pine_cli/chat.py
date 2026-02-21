@@ -17,18 +17,22 @@ console = Console()
 @click.argument("session_id", required=False)
 @handle_api_errors
 def chat_cmd(session_id: Optional[str]):
-    """Interactive chat with Pine AI (REPL)."""
+    """Interactive chat with Pine AI (REPL).
+
+    Optionally pass a SESSION_ID to resume. Without one, shows recent
+    sessions so you can pick an existing session or create a new one.
+    """
     async def _chat():
         client = get_assistant_client()
-        await client.connect()
 
         sid = session_id
         if not sid:
-            with console.status("Creating session…"):
-                s = await client.sessions.create()
-                sid = s["id"]
-            console.print(f"[dim]Session: {sid}[/dim]")
+            sid = await _pick_or_create_session(client)
+            if not sid:
+                return
 
+        await client.connect()
+        console.print(f"[dim]Session: {sid}[/dim]")
         await client.join_session(sid)
         console.print("[cyan]Type your message (Ctrl+C or /quit to exit)[/cyan]\n")
 
@@ -50,25 +54,35 @@ def chat_cmd(session_id: Optional[str]):
 
 @click.command("send")
 @click.argument("message")
-@click.option("-s", "--session", "session_id", default=None, help="Existing session ID")
+@click.option("-s", "--session", "session_id", default=None, help="Session ID to send the message to")
+@click.option("--new", "create_new", is_flag=True, help="Create a new session, then send")
 @click.option("--json-output", "--json", is_flag=True, help="Output as JSON")
 @handle_api_errors
-def send_cmd(message: str, session_id: Optional[str], json_output: bool):
-    """Send a one-shot message to Pine AI."""
+def send_cmd(message: str, session_id: Optional[str], create_new: bool, json_output: bool):
+    """Send a message to a Pine AI session.
+
+    Requires either --session/-s to target an existing session,
+    or --new to create a fresh session first.
+    """
+    if not session_id and not create_new:
+        raise click.UsageError("Provide --session/-s SESSION_ID or --new to create one.")
+    if session_id and create_new:
+        raise click.UsageError("Cannot use --session and --new together.")
+
     async def _send():
         client = get_assistant_client()
-        await client.connect()
 
         sid = session_id
-        try:
-            if not sid:
-                s = await client.sessions.create()
-                sid = s["id"]
-                if json_output:
-                    click.echo(json.dumps({"type": "session_created", "data": {"session_id": sid}}))
-                else:
-                    console.print(f"[dim]Session: {sid}[/dim]")
+        if create_new:
+            s = await client.sessions.create()
+            sid = s["id"]
+            if json_output:
+                click.echo(json.dumps({"type": "session_created", "data": {"session_id": sid}}))
+            else:
+                console.print(f"[green]✓ Session created:[/green]  [bold]{sid}[/bold]")
 
+        await client.connect()
+        try:
             await client.join_session(sid)
             async for event in client.chat(sid, message):
                 if json_output:
@@ -81,6 +95,60 @@ def send_cmd(message: str, session_id: Optional[str], json_output: bool):
             await client.disconnect()
 
     run_async(_send())
+
+
+async def _pick_or_create_session(client) -> Optional[str]:
+    """Show recent sessions and let the user pick one or create a new session."""
+    page_size = 10
+    offset = 0
+    all_items: list = []
+
+    while True:
+        with console.status("Fetching sessions…"):
+            result = await client.sessions.list(limit=page_size, offset=offset)
+
+        page = result.get("sessions", [])
+        total = result.get("total", 0)
+        all_items.extend(page)
+
+        if not all_items:
+            console.print("[dim]No existing sessions found.[/dim]")
+            choice = "n"
+        else:
+            console.print("[bold]Recent sessions:[/bold]")
+            for i, s in enumerate(all_items, 1):
+                title = s.get("title") or "[dim]untitled[/dim]"
+                state = s.get("state", "")
+                console.print(f"  [bold]{i}.[/bold] {title}  [dim]({state})[/dim]  [dim]{s['id']}[/dim]")
+            has_more = len(all_items) < total
+            console.print(f"  [bold]n.[/bold] Create a new session")
+            if has_more:
+                console.print(f"  [bold]m.[/bold] Show more  [dim]({len(all_items)} of {total})[/dim]")
+            console.print()
+            choice = click.prompt("Select a session (number, 'n', or 'm')" if has_more
+                                  else "Select a session (number or 'n')", default="1")
+
+        cmd = choice.strip().lower()
+
+        if cmd == "n":
+            with console.status("Creating session…"):
+                s = await client.sessions.create()
+            console.print(f"[green]✓ Session created:[/green]  [bold]{s['id']}[/bold]")
+            return s["id"]
+
+        if cmd == "m" and len(all_items) < total:
+            offset = len(all_items)
+            continue
+
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(all_items):
+                return all_items[idx]["id"]
+            console.print("[red]Invalid selection.[/red]")
+            return None
+        except ValueError:
+            console.print("[red]Invalid selection.[/red]")
+            return None
 
 
 def _print_event(event):

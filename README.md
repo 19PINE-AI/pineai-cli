@@ -31,11 +31,17 @@ pine voice call \
 # Check call status
 pine voice status <call-id>
 
-# Start an assistant chat
+# Start an assistant chat (pick or create session interactively)
 pine chat
 
-# Send a one-shot message
-pine send "Negotiate my Comcast bill down"
+# Resume a specific session
+pine chat <session-id>
+
+# Send a message to an existing session
+pine send -s <session-id> "Negotiate my Comcast bill down"
+
+# Create a new session and send in one step (non-interactive, for scripts/agents)
+pine send --new "Negotiate my Comcast bill down" --json
 
 # List sessions
 pine sessions list
@@ -82,8 +88,9 @@ pine task start <session-id>
 
 | Command | Description |
 |---------|-------------|
-| `pine chat [session-id]` | Interactive REPL chat |
-| `pine send <message>` | One-shot message |
+| `pine chat [session-id]` | Interactive REPL chat (picks or creates session) |
+| `pine send -s <id> <message>` | Send message to an existing session |
+| `pine send --new <message>` | Create session + send (non-interactive) |
 | `pine sessions list` | List sessions |
 | `pine sessions get <id>` | Get session details |
 | `pine sessions create` | Create new session |
