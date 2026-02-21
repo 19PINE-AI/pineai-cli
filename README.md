@@ -37,11 +37,14 @@ pine chat
 # Resume a specific session
 pine chat <session-id>
 
-# Send a message to an existing session
+# Send a message to an existing session (waits for response)
 pine send -s <session-id> "Negotiate my Comcast bill down"
 
-# Create a new session and send in one step (non-interactive, for scripts/agents)
-pine send --new "Negotiate my Comcast bill down" --json
+# Fire-and-forget (for scripts/agents — returns immediately)
+pine send -s <session-id> "Negotiate my Comcast bill down" --no-wait --json
+
+# Create a new session and send in one step
+pine send --new "Negotiate my Comcast bill down" --no-wait --json
 
 # List sessions
 pine sessions list
@@ -89,10 +92,11 @@ pine task start <session-id>
 | Command | Description |
 |---------|-------------|
 | `pine chat [session-id]` | Interactive REPL chat (picks or creates session) |
-| `pine send -s <id> <message>` | Send message to an existing session |
-| `pine send --new <message>` | Create session + send (non-interactive) |
+| `pine send -s <id> <message>` | Send message and wait for response |
+| `pine send --new <message>` | Create session + send |
+| `pine send ... --no-wait` | Fire-and-forget (for scripts/agents) |
 | `pine sessions list` | List sessions |
-| `pine sessions get <id>` | Get session details |
+| `pine sessions get <id>` | Get session details + conversation history |
 | `pine sessions create` | Create new session |
 | `pine sessions delete <id>` | Delete session |
 | `pine task start <id>` | Start task execution |

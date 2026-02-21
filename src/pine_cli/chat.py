@@ -1,6 +1,8 @@
 """pine chat / pine send — interactive and one-shot messaging."""
 
+import asyncio
 import json
+import signal
 from typing import Optional
 
 import click
@@ -34,19 +36,41 @@ def chat_cmd(session_id: Optional[str]):
         await client.connect()
         console.print(f"[dim]Session: {sid}[/dim]")
         await client.join_session(sid)
+
+        with console.status("Loading history…"):
+            history = await client.get_history(sid, max_messages=20, order="asc")
+        messages = history.get("messages", [])
+        if messages:
+            console.print(f"[dim]─── last {len(messages)} messages ───[/dim]")
+            for msg in messages:
+                _print_history_message(msg)
+            console.print(f"[dim]─── end of history ───[/dim]\n")
+
         console.print("[cyan]Type your message (Ctrl+C or /quit to exit)[/cyan]\n")
 
+        prev_handler = signal.getsignal(signal.SIGINT)
         try:
             while True:
-                msg = click.prompt("You", prompt_suffix=": ")
+                signal.signal(signal.SIGINT, signal.default_int_handler)
+                try:
+                    msg = input("You: ")
+                except (KeyboardInterrupt, EOFError):
+                    console.print()
+                    break
+                finally:
+                    signal.signal(signal.SIGINT, prev_handler)
+
                 if msg.strip().lower() in ("/quit", "/exit"):
                     break
                 async for event in client.chat(sid, msg):
                     _print_event(event)
-        except (KeyboardInterrupt, EOFError):
-            console.print()
         finally:
-            client.leave_session(sid)
+            signal.signal(signal.SIGINT, prev_handler)
+            try:
+                client.leave_session(sid)
+                await asyncio.sleep(1)
+            except (asyncio.CancelledError, Exception):
+                pass
             await client.disconnect()
 
     run_async(_chat())
@@ -56,9 +80,10 @@ def chat_cmd(session_id: Optional[str]):
 @click.argument("message")
 @click.option("-s", "--session", "session_id", default=None, help="Session ID to send the message to")
 @click.option("--new", "create_new", is_flag=True, help="Create a new session, then send")
+@click.option("--no-wait", "no_wait", is_flag=True, help="Fire-and-forget: send without waiting for response")
 @click.option("--json-output", "--json", is_flag=True, help="Output as JSON")
 @handle_api_errors
-def send_cmd(message: str, session_id: Optional[str], create_new: bool, json_output: bool):
+def send_cmd(message: str, session_id: Optional[str], create_new: bool, no_wait: bool, json_output: bool):
     """Send a message to a Pine AI session.
 
     Requires either --session/-s to target an existing session,
@@ -84,13 +109,23 @@ def send_cmd(message: str, session_id: Optional[str], create_new: bool, json_out
         await client.connect()
         try:
             await client.join_session(sid)
-            async for event in client.chat(sid, message):
+
+            if no_wait:
+                client.send_message(sid, message)
                 if json_output:
-                    click.echo(json.dumps({"type": event.type, "data": event.data}))
+                    click.echo(json.dumps({"type": "message_sent", "data": {"session_id": sid}}))
                 else:
-                    _print_event(event)
+                    console.print("[green]✓ Message sent.[/green]")
+            else:
+                async for event in client.chat(sid, message):
+                    if json_output:
+                        click.echo(json.dumps({"type": event.type, "data": event.data}))
+                    else:
+                        _print_event(event)
 
             client.leave_session(sid)
+            if no_wait:
+                await asyncio.sleep(1)
         finally:
             await client.disconnect()
 
@@ -149,6 +184,35 @@ async def _pick_or_create_session(client) -> Optional[str]:
         except ValueError:
             console.print("[red]Invalid selection.[/red]")
             return None
+
+
+def _print_history_message(msg):
+    """Render a single history message (compact format for chat context)."""
+    meta = msg.get("metadata", {})
+    source = meta.get("source", {})
+    role = source.get("role", "unknown")
+    msg_type = msg.get("type", "")
+    payload = msg.get("payload", {})
+    data = payload.get("data", {}) if isinstance(payload.get("data"), dict) else {}
+
+    if msg_type == "session:message" and role == "user":
+        content = data.get("content", "")
+        if content:
+            console.print(f"  [cyan]You:[/cyan] {content}")
+    elif msg_type == "session:text":
+        content = data.get("content", "")
+        if content:
+            console.print(f"  [green]Pine AI:[/green] {content}")
+    elif msg_type == "session:work_log":
+        steps = data.get("steps", [])
+        for step in steps:
+            details = step.get("step_details", "")
+            if details:
+                console.print(f"  [green]Pine AI:[/green] {details}")
+    elif msg_type == "session:form_to_user":
+        user_msg = data.get("message_to_user", "")
+        if user_msg:
+            console.print(f"  [yellow]Pine AI (form):[/yellow] {user_msg}")
 
 
 def _print_event(event):
