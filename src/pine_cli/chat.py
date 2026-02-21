@@ -275,10 +275,11 @@ def _print_history_message(msg):
 
 
 class _StreamPrinter:
-    """Handles streaming text_part events inline; delegates everything else."""
+    """Handles streaming text_part events inline; deduplicates work-log steps."""
 
     def __init__(self):
         self._in_text = False
+        self._seen_steps: set[tuple[str, str]] = set()
 
     def feed(self, event):
         if event.type == S2CEvent.SESSION_TEXT_PART:
@@ -290,9 +291,34 @@ class _StreamPrinter:
                     self._in_text = True
                 console.file.write(content)
                 console.file.flush()
+        elif event.type in (S2CEvent.SESSION_WORK_LOG, S2CEvent.SESSION_WORK_LOG_PART):
+            self.flush()
+            self._print_work_steps(event)
         else:
             self.flush()
             _print_event(event)
+
+    def _print_work_steps(self, event):
+        data = event.data if isinstance(event.data, dict) else {}
+        if event.type == S2CEvent.SESSION_WORK_LOG:
+            steps = data.get("steps", [])
+        else:
+            t = data.get("step_title", "")
+            steps = [{"step_title": t, "status": data.get("status", "")}] if t else []
+
+        for step in steps:
+            title = step.get("step_title", "").strip()
+            status = step.get("status", "").strip()
+            if not title:
+                continue
+            key = (title, status)
+            if key in self._seen_steps:
+                continue
+            self._seen_steps.add(key)
+            if status:
+                console.print(f"[dim]  ● {title} \\[{status}][/dim]")
+            else:
+                console.print(f"[dim]  ● {title}[/dim]")
 
     def flush(self):
         if self._in_text:
@@ -320,16 +346,3 @@ def _print_event(event):
             console.print(f"[dim]  ● state → {state}[/dim]")
     elif event.type == S2CEvent.SESSION_THINKING:
         console.print("[dim]  ● thinking…[/dim]")
-    elif event.type == S2CEvent.SESSION_WORK_LOG:
-        data = event.data if isinstance(event.data, dict) else {}
-        steps = data.get("steps", [])
-        for step in steps:
-            title = step.get("step_title", "")
-            status = step.get("status", "")
-            console.print(f"[dim]  ● {title} \\[{status}][/dim]" if status else f"[dim]  ● {title}[/dim]")
-    elif event.type == S2CEvent.SESSION_WORK_LOG_PART:
-        data = event.data if isinstance(event.data, dict) else {}
-        title = data.get("step_title", "")
-        status = data.get("status", "")
-        if title or status:
-            console.print(f"[dim]  ● {title} \\[{status}][/dim]" if status else f"[dim]  ● {title}[/dim]")

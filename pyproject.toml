@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pineai-cli"
-version = "0.3.0"
+version = "0.4.0"
 description = "Unified CLI for Pine AI — voice calls & assistant tasks from your terminal"
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,7 @@ classifiers = [
 ]
 dependencies = [
     "pine-voice>=0.1.5",
-    "pine-assistant>=0.2.0",
+    "pine-assistant>=0.3.0",
     "click>=8.1.0",
     "rich>=13.0.0",
 ]
