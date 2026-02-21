@@ -74,8 +74,10 @@ def chat_cmd(session_id: Optional[str]):
                         await client.connect()
                         await client.join_session(sid)
 
+                printer = _StreamPrinter()
                 async for event in client.chat(sid, msg):
-                    _print_event(event)
+                    printer.feed(event)
+                printer.flush()
         finally:
             try:
                 client.leave_session(sid)
@@ -128,11 +130,13 @@ def send_cmd(message: str, session_id: Optional[str], create_new: bool, no_wait:
                 else:
                     console.print("[green]✓ Message sent.[/green]")
             else:
+                printer = _StreamPrinter()
                 async for event in client.chat(sid, message):
                     if json_output:
                         click.echo(json.dumps({"type": event.type, "data": event.data}))
                     else:
-                        _print_event(event)
+                        printer.feed(event)
+                printer.flush()
 
             client.leave_session(sid)
             if no_wait:
@@ -233,8 +237,35 @@ def _print_history_message(msg):
             _print_labeled("[yellow]Pine AI (form):[/yellow]", user_msg, ts=ts)
 
 
+class _StreamPrinter:
+    """Handles streaming text_part events inline; delegates everything else."""
+
+    def __init__(self):
+        self._in_text = False
+
+    def feed(self, event):
+        if event.type == S2CEvent.SESSION_TEXT_PART:
+            data = event.data if isinstance(event.data, dict) else {}
+            content = data.get("content", "")
+            if content:
+                if not self._in_text:
+                    console.print("[green]Pine AI:[/green] ", end="")
+                    self._in_text = True
+                console.file.write(content)
+                console.file.flush()
+        else:
+            self.flush()
+            _print_event(event)
+
+    def flush(self):
+        if self._in_text:
+            console.file.write("\n")
+            console.file.flush()
+            self._in_text = False
+
+
 def _print_event(event):
-    """Render a chat event to the console."""
+    """Render a non-streaming chat event to the console."""
     if event.type == S2CEvent.SESSION_TEXT:
         data = event.data if isinstance(event.data, dict) else {}
         content = data.get("content", "")
@@ -256,4 +287,12 @@ def _print_event(event):
         data = event.data if isinstance(event.data, dict) else {}
         steps = data.get("steps", [])
         for step in steps:
-            console.print(f"[dim]  ● {step.get('step_title', '')} [{step.get('status', '')}][/dim]")
+            title = step.get("step_title", "")
+            status = step.get("status", "")
+            console.print(f"[dim]  ● {title} \\[{status}][/dim]" if status else f"[dim]  ● {title}[/dim]")
+    elif event.type == S2CEvent.SESSION_WORK_LOG_PART:
+        data = event.data if isinstance(event.data, dict) else {}
+        title = data.get("step_title", "")
+        status = data.get("status", "")
+        if title or status:
+            console.print(f"[dim]  ● {title} \\[{status}][/dim]" if status else f"[dim]  ● {title}[/dim]")
