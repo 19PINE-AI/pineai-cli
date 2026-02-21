@@ -7,10 +7,11 @@ from typing import Optional
 
 import click
 from rich.console import Console
+from rich.padding import Padding
 from rich.panel import Panel
 
 from pine_assistant.models.events import S2CEvent
-from pine_cli.config import get_assistant_client, run_async, handle_api_errors
+from pine_cli.config import get_assistant_client, run_async, handle_api_errors, format_timestamp
 
 console = Console()
 
@@ -186,11 +187,18 @@ async def _pick_or_create_session(client) -> Optional[str]:
             return None
 
 
+def _print_labeled(label: str, content: str, pad: int = 2, ts: str = ""):
+    """Print a labeled message with all lines indented consistently."""
+    ts_part = f" [dim]({format_timestamp(ts)})[/dim]" if ts else ""
+    console.print(Padding(f"{label}{ts_part} {content}", (0, 0, 0, pad)), soft_wrap=False)
+
+
 def _print_history_message(msg):
     """Render a single history message (compact format for chat context)."""
     meta = msg.get("metadata", {})
     source = meta.get("source", {})
     role = source.get("role", "unknown")
+    ts = meta.get("timestamp", "")
     msg_type = msg.get("type", "")
     payload = msg.get("payload", {})
     data = payload.get("data", {}) if isinstance(payload.get("data"), dict) else {}
@@ -198,21 +206,21 @@ def _print_history_message(msg):
     if msg_type == "session:message" and role == "user":
         content = data.get("content", "")
         if content:
-            console.print(f"  [cyan]You:[/cyan] {content}")
+            _print_labeled("[cyan]You:[/cyan]", content, ts=ts)
     elif msg_type == "session:text":
         content = data.get("content", "")
         if content:
-            console.print(f"  [green]Pine AI:[/green] {content}")
+            _print_labeled("[green]Pine AI:[/green]", content, ts=ts)
     elif msg_type == "session:work_log":
         steps = data.get("steps", [])
         for step in steps:
             details = step.get("step_details", "")
             if details:
-                console.print(f"  [green]Pine AI:[/green] {details}")
+                _print_labeled("[green]Pine AI:[/green]", details, ts=ts)
     elif msg_type == "session:form_to_user":
         user_msg = data.get("message_to_user", "")
         if user_msg:
-            console.print(f"  [yellow]Pine AI (form):[/yellow] {user_msg}")
+            _print_labeled("[yellow]Pine AI (form):[/yellow]", user_msg, ts=ts)
 
 
 def _print_event(event):
@@ -221,7 +229,7 @@ def _print_event(event):
         data = event.data if isinstance(event.data, dict) else {}
         content = data.get("content", "")
         if content:
-            console.print(f"[green]Pine AI:[/green] {content}")
+            _print_labeled("[green]Pine AI:[/green]", content, pad=0)
     elif event.type == S2CEvent.SESSION_FORM_TO_USER:
         data = event.data if isinstance(event.data, dict) else {}
         msg = data.get("message_to_user", "")

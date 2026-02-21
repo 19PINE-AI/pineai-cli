@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -54,8 +55,26 @@ def get_assistant_client():
     )
 
 
+def format_timestamp(raw: str) -> str:
+    """Turn an ISO timestamp into a short local-time string."""
+    if not raw:
+        return ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone()
+        now = datetime.now(timezone.utc).astimezone()
+        if dt.date() == now.date():
+            return dt.strftime("%H:%M")
+        if dt.year == now.year:
+            return dt.strftime("%b %d %H:%M")
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, OSError):
+        return raw
+
+
 def run_async(coro):
     """Run an async coroutine from sync context."""
+    import logging
+    logging.getLogger("asyncio").setLevel(logging.CRITICAL)
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)

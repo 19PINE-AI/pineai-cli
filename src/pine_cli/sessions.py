@@ -7,7 +7,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from pine_cli.config import get_assistant_client, run_async, handle_api_errors
+from pine_cli.config import get_assistant_client, run_async, handle_api_errors, format_timestamp
 
 console = Console()
 
@@ -45,7 +45,7 @@ def sessions_list(state, limit, offset, json_output):
                 "init": "yellow", "active": "green",
             }.get(s.get("state", ""), "white")
             table.add_row(s["id"], f"[{state_color}]{s.get('state', '')}[/{state_color}]",
-                          s.get("title", ""), s.get("updated_at", ""))
+                          s.get("title", ""), format_timestamp(s.get("updated_at", "")))
         console.print(table)
         if end < total:
             next_offset = offset + limit
@@ -83,8 +83,8 @@ def sessions_get(session_id, limit, json_output):
         console.print(f"[bold]Session {metadata['id']}[/bold]")
         console.print(f"  State: {metadata.get('state', '?')}")
         console.print(f"  Title: {metadata.get('title', '—')}")
-        console.print(f"  Created: {metadata.get('created_at', '?')}")
-        console.print(f"  Updated: {metadata.get('updated_at', '?')}")
+        console.print(f"  Created: {format_timestamp(metadata.get('created_at', ''))}")
+        console.print(f"  Updated: {format_timestamp(metadata.get('updated_at', ''))}")
         console.print(f"  URL: https://www.19pine.ai/app/chat/{metadata['id']}")
 
         messages = history.get("messages", [])
@@ -110,14 +110,16 @@ def _print_history_message(msg):
     payload = msg.get("payload", {})
     data = payload.get("data", {}) if isinstance(payload.get("data"), dict) else {}
 
+    fts = format_timestamp(ts)
+
     if msg_type == "session:message" and role == "user":
         content = data.get("content", "")
-        console.print(f"\n[bold cyan]You[/bold cyan]  [dim]{ts}[/dim]")
+        console.print(f"\n[bold cyan]You[/bold cyan]  [dim]{fts}[/dim]")
         if content:
             console.print(f"  {content}")
     elif msg_type == "session:text":
         content = data.get("content", "")
-        console.print(f"\n[bold green]Pine AI[/bold green]  [dim]{ts}[/dim]")
+        console.print(f"\n[bold green]Pine AI[/bold green]  [dim]{fts}[/dim]")
         if content:
             console.print(f"  {content}")
     elif msg_type == "session:work_log":
@@ -126,11 +128,11 @@ def _print_history_message(msg):
             details = step.get("step_details", "")
             title = step.get("step_title", "")
             if details:
-                console.print(f"\n[bold green]Pine AI[/bold green]  [dim]{ts}[/dim]  [dim]({title})[/dim]")
+                console.print(f"\n[bold green]Pine AI[/bold green]  [dim]{fts}[/dim]  [dim]({title})[/dim]")
                 console.print(f"  {details}")
     elif msg_type in ("session:form_to_user", "session:ask_for_location",
                       "session:three_way_call", "session:interactive_auth_confirmation"):
-        console.print(f"\n[bold yellow]Pine AI ({msg_type})[/bold yellow]  [dim]{ts}[/dim]")
+        console.print(f"\n[bold yellow]Pine AI ({msg_type})[/bold yellow]  [dim]{fts}[/dim]")
         console.print(f"  {json.dumps(data, indent=2)}")
 
 
