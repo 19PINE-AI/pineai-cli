@@ -3,6 +3,7 @@
 import asyncio
 import json
 import signal
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import click
@@ -14,6 +15,21 @@ from pine_assistant.models.events import S2CEvent
 from pine_cli.config import get_assistant_client, run_async, handle_api_errors, format_timestamp
 
 console = Console()
+
+
+def _is_stale(event, cutoff) -> bool:
+    """True if the event's metadata timestamp predates the cutoff."""
+    meta = event.metadata
+    if not isinstance(meta, dict):
+        return False
+    ts_str = meta.get("timestamp")
+    if not ts_str:
+        return False
+    try:
+        event_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        return event_ts < cutoff
+    except (ValueError, TypeError):
+        return False
 
 
 @click.command("chat")
@@ -49,6 +65,21 @@ def chat_cmd(session_id: Optional[str]):
 
         console.print("[cyan]Type your message (Ctrl+C or /quit to exit)[/cyan]\n")
 
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
+        printer = _StreamPrinter()
+
+        async def _bg_listener():
+            try:
+                async for event in client.subscribe(sid):
+                    if _is_stale(event, cutoff):
+                        continue
+                    printer.feed(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
+        bg = asyncio.create_task(_bg_listener())
         loop = asyncio.get_running_loop()
         try:
             while True:
@@ -69,16 +100,22 @@ def chat_cmd(session_id: Optional[str]):
                     break
 
                 if not client.connected:
+                    bg.cancel()
                     with console.status("Reconnecting…"):
                         await client.disconnect()
                         await client.connect()
                         await client.join_session(sid)
+                    bg = asyncio.create_task(_bg_listener())
 
-                printer = _StreamPrinter()
-                async for event in client.chat(sid, msg):
-                    printer.feed(event)
                 printer.flush()
+                client.send_message(sid, msg)
         finally:
+            bg.cancel()
+            try:
+                await bg
+            except asyncio.CancelledError:
+                pass
+            printer.flush()
             try:
                 client.leave_session(sid)
                 await asyncio.sleep(1)
