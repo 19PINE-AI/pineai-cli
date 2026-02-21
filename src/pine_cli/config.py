@@ -74,7 +74,8 @@ def format_timestamp(raw: str) -> str:
 def run_async(coro):
     """Run an async coroutine from sync context."""
     import logging
-    logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+    for name in ("asyncio", "engineio", "socketio"):
+        logging.getLogger(name).setLevel(logging.CRITICAL)
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)

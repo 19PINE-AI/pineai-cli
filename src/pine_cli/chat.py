@@ -49,24 +49,34 @@ def chat_cmd(session_id: Optional[str]):
 
         console.print("[cyan]Type your message (Ctrl+C or /quit to exit)[/cyan]\n")
 
-        prev_handler = signal.getsignal(signal.SIGINT)
+        loop = asyncio.get_running_loop()
         try:
             while True:
-                signal.signal(signal.SIGINT, signal.default_int_handler)
+                input_task = loop.create_task(asyncio.to_thread(input, "You: "))
+                loop.add_signal_handler(signal.SIGINT, input_task.cancel)
                 try:
-                    msg = input("You: ")
-                except (KeyboardInterrupt, EOFError):
+                    msg = await input_task
+                except asyncio.CancelledError:
+                    console.print()
+                    break
+                except EOFError:
                     console.print()
                     break
                 finally:
-                    signal.signal(signal.SIGINT, prev_handler)
+                    loop.remove_signal_handler(signal.SIGINT)
 
                 if msg.strip().lower() in ("/quit", "/exit"):
                     break
+
+                if not client.connected:
+                    with console.status("Reconnecting…"):
+                        await client.disconnect()
+                        await client.connect()
+                        await client.join_session(sid)
+
                 async for event in client.chat(sid, msg):
                     _print_event(event)
         finally:
-            signal.signal(signal.SIGINT, prev_handler)
             try:
                 client.leave_session(sid)
                 await asyncio.sleep(1)
